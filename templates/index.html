@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HIBA UDP Monitor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>HIBA UDP Monitor</h1>
+        <p>UDP 0.0.0.0:5010</p>
+      </div>
+      <div class="status-pill" id="connection-state">Waiting</div>
+    </header>
+
+    <section class="metrics">
+      <div>
+        <span>Packet count</span>
+        <strong id="packet-count">0</strong>
+      </div>
+      <div>
+        <span>Source IP</span>
+        <strong id="source-ip">-</strong>
+      </div>
+      <div>
+        <span>Timestamp</span>
+        <strong id="timestamp">-</strong>
+      </div>
+      <div>
+        <span>Decode errors</span>
+        <strong id="decode-errors">0</strong>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ch</th>
+            <th>Quantity</th>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Raw</th>
+            <th>Value</th>
+            <th>Unit</th>
+            <th>Custom format</th>
+            <th>Offset</th>
+          </tr>
+        </thead>
+        <tbody id="channels-body">
+          {% for channel in channels %}
+          <tr
+            data-channel="{{ channel.index }}"
+            data-config-name="{{ channel.name }}"
+            data-config-scale="{{ channel.scale }}"
+            data-config-unit="{{ channel.unit }}"
+          >
+            <td>{{ channel.index }}</td>
+            <td>
+              <select class="quantity-select" aria-label="Quantity for channel {{ channel.index }}">
+                <option value="config">Config: {{ channel.name }}</option>
+                <option value="voltage">Voltage</option>
+                <option value="resistance">Resistance</option>
+                <option value="current">Current</option>
+                <option value="power">Power</option>
+                <option value="temperature">Temperature</option>
+                <option value="percent">Percent</option>
+                <option value="seconds">Seconds</option>
+                <option value="custom">Custom</option>
+              </select>
+            </td>
+            <td>{{ channel.parameter }}</td>
+            <td class="data-type">{{ "int16" if channel.signed else "uint16" }}</td>
+            <td class="raw">-</td>
+            <td class="value">-</td>
+            <td class="unit">{{ channel.unit }}</td>
+            <td>
+              <div class="custom-grid">
+                <input class="custom-name" type="text" placeholder="Name">
+                <input class="custom-scale" type="number" step="0.0001" placeholder="Scale">
+                <input class="custom-unit" type="text" placeholder="Unit">
+                <input class="custom-decimals" type="number" min="0" max="6" step="1" placeholder="Dec">
+              </div>
+            </td>
+            <td>{{ 12 + (channel.index - 1) * 2 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <p class="hint-line">Raw type is decoded on the server as uint16 or int16 from config.yaml. Quantity formatting is selected per channel in the browser.</p>
+    <p class="error-line" id="last-error"></p>
+  </main>
+
+  <script>
+    const PRESETS = {
+      voltage: { name: "Voltage", scale: 0.1, unit: "V", decimals: 1 },
+      resistance: { name: "Resistance", scale: 1, unit: "Ohm", decimals: 0 },
+      current: { name: "Current", scale: 0.01, unit: "A", decimals: 2 },
+      power: { name: "Power", scale: 1, unit: "W", decimals: 0 },
+      temperature: { name: "Temperature", scale: 0.1, unit: "degC", decimals: 1 },
+      percent: { name: "Percent", scale: 0.1, unit: "%", decimals: 1 },
+      seconds: { name: "Seconds", scale: 0.001, unit: "s", decimals: 3 },
+    };
+    const STORAGE_KEY = "hiba_channel_formatting_v1";
+
+    const rows = new Map(
+      Array.from(document.querySelectorAll("[data-channel]")).map((row) => [
+        Number(row.dataset.channel),
+        row,
+      ])
+    );
+
+    function loadSettings() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveSettings() {
+      const settings = {};
+      for (const [index, row] of rows) {
+        settings[index] = {
+          preset: row.querySelector(".quantity-select").value,
+          name: row.querySelector(".custom-name").value,
+          scale: row.querySelector(".custom-scale").value,
+          unit: row.querySelector(".custom-unit").value,
+          decimals: row.querySelector(".custom-decimals").value,
+        };
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    }
+
+    function applyStoredSettings() {
+      const settings = loadSettings();
+      for (const [index, row] of rows) {
+        const rowSettings = settings[index];
+        if (!rowSettings) {
+          continue;
+        }
+        row.querySelector(".quantity-select").value = rowSettings.preset || "config";
+        row.querySelector(".custom-name").value = rowSettings.name || "";
+        row.querySelector(".custom-scale").value = rowSettings.scale || "";
+        row.querySelector(".custom-unit").value = rowSettings.unit || "";
+        row.querySelector(".custom-decimals").value = rowSettings.decimals || "";
+        updateCustomState(row);
+      }
+    }
+
+    function getFormat(row) {
+      const preset = row.querySelector(".quantity-select").value;
+      if (preset === "config") {
+        return {
+          name: row.dataset.configName,
+          scale: Number(row.dataset.configScale),
+          unit: row.dataset.configUnit,
+          decimals: 2,
+        };
+      }
+      if (preset !== "custom") {
+        return PRESETS[preset];
+      }
+
+      const scale = Number(row.querySelector(".custom-scale").value);
+      const decimals = Number(row.querySelector(".custom-decimals").value);
+      return {
+        name: row.querySelector(".custom-name").value || "Custom",
+        scale: Number.isFinite(scale) ? scale : 1,
+        unit: row.querySelector(".custom-unit").value || "",
+        decimals: Number.isInteger(decimals) ? Math.max(0, Math.min(decimals, 6)) : 2,
+      };
+    }
+
+    function updateCustomState(row) {
+      const isCustom = row.querySelector(".quantity-select").value === "custom";
+      row.querySelectorAll(".custom-grid input").forEach((input) => {
+        input.disabled = !isCustom;
+      });
+    }
+
+    function formatTimestamp(timestamp) {
+      if (!timestamp) {
+        return "-";
+      }
+      return new Date(timestamp).toLocaleString();
+    }
+
+    function formatValue(raw, format) {
+      if (raw === null || raw === undefined || Number.isNaN(Number(raw))) {
+        return "-";
+      }
+      return (Number(raw) * format.scale).toFixed(format.decimals);
+    }
+
+    for (const row of rows.values()) {
+      row.querySelector(".quantity-select").addEventListener("change", () => {
+        updateCustomState(row);
+        saveSettings();
+      });
+      row.querySelectorAll(".custom-grid input").forEach((input) => {
+        input.addEventListener("input", saveSettings);
+      });
+      updateCustomState(row);
+    }
+    applyStoredSettings();
+
+    async function refresh() {
+      try {
+        const [latestResponse, statusResponse] = await Promise.all([
+          fetch("/api/latest"),
+          fetch("/api/status"),
+        ]);
+        const latest = await latestResponse.json();
+        const status = await statusResponse.json();
+
+        document.getElementById("packet-count").textContent = status.packet_count ?? 0;
+        document.getElementById("source-ip").textContent = latest.source_ip || status.last_source_ip || "-";
+        document.getElementById("timestamp").textContent = formatTimestamp(latest.timestamp);
+        document.getElementById("decode-errors").textContent = status.decode_errors ?? 0;
+        document.getElementById("last-error").textContent = status.last_error || "";
+
+        const state = document.getElementById("connection-state");
+        state.textContent = status.has_data ? "Receiving" : "Waiting";
+        state.className = status.has_data ? "status-pill is-live" : "status-pill";
+
+        for (const channel of latest.channels || []) {
+          const row = rows.get(channel.index);
+          if (!row) {
+            continue;
+          }
+          const format = getFormat(row);
+          row.querySelector(".data-type").textContent = channel.data_type || "-";
+          row.querySelector(".raw").textContent = channel.raw;
+          row.querySelector(".value").textContent = formatValue(channel.raw, format);
+          row.querySelector(".unit").textContent = format.unit || "-";
+        }
+      } catch (error) {
+        document.getElementById("connection-state").textContent = "API error";
+        document.getElementById("connection-state").className = "status-pill is-error";
+        document.getElementById("last-error").textContent = error.message;
+      }
+    }
+
+    refresh();
+    window.setInterval(refresh, 1000);
+  </script>
+</body>
+</html>

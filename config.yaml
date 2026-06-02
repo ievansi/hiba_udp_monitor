@@ -1,0 +1,41 @@
+channels:
+  - name: DC bus voltage filter
+    parameter: U5-05
+    scale: 0.1
+    unit: V
+    signed: false
+  - name: DC bus voltage filter
+    parameter: U5-05
+    scale: 0.1
+    unit: V
+    signed: false
+  - name: DC bus voltage filter
+    parameter: U5-05
+    scale: 0.1
+    unit: V
+    signed: false
+  - name: DC bus voltage filter
+    parameter: U5-05
+    scale: 0.1
+    unit: V
+    signed: false
+  - name: DC bus voltage filter
+    parameter: U5-05
+    scale: 0.1
+    unit: V
+    signed: false
+  - name: DC bus voltage filter
+    parameter: U5-05
+    scale: 0.1
+    unit: V
+    signed: false
+  - name: DC bus voltage filter
+    parameter: U5-05
+    scale: 0.1
+    unit: V
+    signed: false
+  - name: DC bus voltage filter
+    parameter: U5-05
+    scale: 0.1
+    unit: V
+    signed: false
