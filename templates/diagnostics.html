@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HIBA Diagnostics</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>Diagnostics</h1>
+        <p>Raw packet HEX</p>
+      </div>
+      <div class="topbar-actions">
+        <a class="action-button" href="{{ url_for('index') }}">Dashboard</a>
+        <a class="action-button" href="{{ url_for('events_page') }}">Events</a>
+        <a class="action-button" href="{{ url_for('config_page') }}">Config</a>
+      </div>
+    </header>
+
+    <section class="metrics">
+      <div>
+        <span>Source IP</span>
+        <strong id="diag-source">-</strong>
+      </div>
+      <div>
+        <span>Packet count</span>
+        <strong id="diag-count">0</strong>
+      </div>
+      <div>
+        <span>Length</span>
+        <strong id="diag-length">-</strong>
+      </div>
+      <div>
+        <span>Timestamp</span>
+        <strong id="diag-time">-</strong>
+      </div>
+      <div>
+        <span>Validation</span>
+        <strong id="diag-validation">-</strong>
+      </div>
+    </section>
+
+    <section class="config-panel">
+      <div class="section-heading">
+        <h2>Packet fields</h2>
+        <span>Header / trailer</span>
+      </div>
+      <div class="diagnostic-grid">
+        <div><span>Header</span><strong id="diag-header">-</strong></div>
+        <div><span>Start marker</span><strong id="diag-start">-</strong></div>
+        <div><span>Payload length field</span><strong id="diag-len-field">-</strong></div>
+        <div><span>Trailer</span><strong id="diag-trailer">-</strong></div>
+      </div>
+    </section>
+
+    <section class="config-panel">
+      <div class="section-heading">
+        <h2>Raw packet HEX</h2>
+        <span>270 bytes</span>
+      </div>
+      <pre class="hex-view" id="hex-view">No packet yet</pre>
+    </section>
+  </main>
+
+  <script>
+    function validationText(validation) {
+      if (!validation) {
+        return "-";
+      }
+      const ok = validation.start_marker_ok
+        && validation.trailer_ok
+        && validation.length_ok
+        && validation.payload_length_field_ok;
+      return ok ? "OK" : "Check";
+    }
+
+    function formatHex(hex) {
+      if (!hex) {
+        return "No packet yet";
+      }
+      const bytes = hex.split(" ");
+      const lines = [];
+      for (let index = 0; index < bytes.length; index += 16) {
+        const offset = index.toString(16).padStart(4, "0");
+        lines.push(`${offset}: ${bytes.slice(index, index + 16).join(" ")}`);
+      }
+      return lines.join("\n");
+    }
+
+    async function refreshDiagnostics() {
+      const response = await fetch("/api/diagnostics");
+      const payload = await response.json();
+      document.getElementById("diag-source").textContent = payload.source_ip || "-";
+      document.getElementById("diag-count").textContent = payload.packet_count ?? 0;
+      document.getElementById("diag-length").textContent = `${payload.packet_length ?? "-"} / ${payload.expected_packet_length ?? "-"}`;
+      document.getElementById("diag-time").textContent = payload.timestamp ? new Date(payload.timestamp).toLocaleString() : "-";
+      document.getElementById("diag-validation").textContent = validationText(payload.validation);
+      document.getElementById("diag-header").textContent = payload.header?.hex || "-";
+      document.getElementById("diag-start").textContent = payload.header?.start_marker || "-";
+      document.getElementById("diag-len-field").textContent = payload.header?.payload_length_be ?? "-";
+      document.getElementById("diag-trailer").textContent = payload.header?.trailer || "-";
+      document.getElementById("hex-view").textContent = formatHex(payload.raw_packet_hex);
+    }
+
+    refreshDiagnostics();
+    window.setInterval(refreshDiagnostics, 1000);
+  </script>
+</body>
+</html>

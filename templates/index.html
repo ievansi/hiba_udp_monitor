@@ -13,55 +13,159 @@
         <h1>HIBA UDP Monitor</h1>
         <p>UDP 0.0.0.0:5010</p>
       </div>
-      <div class="status-pill" id="connection-state">Waiting</div>
+      <div class="topbar-actions">
+        <div class="language-switch" aria-label="Language">
+          <button type="button" data-lang="ru">RU</button>
+          <button type="button" data-lang="en">EN</button>
+        </div>
+        <a class="action-button" href="{{ url_for('config_page') }}">Config</a>
+        <a class="action-button" href="{{ url_for('events_page') }}">Events</a>
+        <a class="action-button" href="{{ url_for('diagnostics_page') }}">Diagnostics</a>
+        <a class="action-button" href="{{ url_for('charts') }}" target="hiba_charts" data-i18n="charts">Charts</a>
+        <div class="status-pill" id="connection-state" data-i18n="waiting">Waiting</div>
+      </div>
     </header>
 
     <section class="metrics">
       <div>
-        <span>Packet count</span>
+        <span data-i18n="packet_count">Packet count</span>
         <strong id="packet-count">0</strong>
       </div>
       <div>
-        <span>Source IP</span>
+        <span data-i18n="active_devices">Active devices</span>
+        <strong id="active-devices">0 / 16</strong>
+      </div>
+      <div>
+        <span data-i18n="source_ip">Source IP</span>
         <strong id="source-ip">-</strong>
       </div>
       <div>
-        <span>Timestamp</span>
+        <span data-i18n="timestamp">Timestamp</span>
         <strong id="timestamp">-</strong>
       </div>
       <div>
-        <span>Decode errors</span>
+        <span data-i18n="decode_errors">Decode errors</span>
         <strong id="decode-errors">0</strong>
       </div>
     </section>
 
-    <section class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Ch</th>
-            <th>Quantity</th>
-            <th>Parameter</th>
-            <th>Type</th>
-            <th>Raw</th>
-            <th>Value</th>
-            <th>Unit</th>
-            <th>Custom format</th>
-            <th>Offset</th>
-          </tr>
-        </thead>
-        <tbody id="channels-body">
-          {% for channel in channels %}
-          <tr
-            data-channel="{{ channel.index }}"
-            data-config-name="{{ channel.name }}"
-            data-config-scale="{{ channel.scale }}"
-            data-config-unit="{{ channel.unit }}"
-          >
-            <td>{{ channel.index }}</td>
-            <td>
+    <section class="device-panel">
+      <div class="section-heading">
+        <h2 data-i18n="devices">Devices</h2>
+        <span id="selected-device-label">Device 1</span>
+      </div>
+      <div class="filter-bar">
+        <label>
+          <span>Device filter</span>
+          <select id="device-status-filter">
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </label>
+      </div>
+      <div class="device-grid" id="device-grid">
+        {% for device in devices %}
+        <button class="device-card" type="button" data-device="{{ device.index }}">
+          <span class="device-name">{{ device.name }}</span>
+          <small class="device-model">{{ device.model }}</small>
+          <strong class="device-state" data-i18n="inactive">Inactive</strong>
+        </button>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="channel-panel">
+      <div class="section-heading">
+        <h2 data-i18n="channels">Channels</h2>
+        <span data-i18n="selected_device_hint">Selected device data</span>
+      </div>
+      <div class="filter-bar">
+        <label>
+          <span>Channel filter</span>
+          <select id="channel-status-filter">
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </label>
+        <label>
+          <span>Quantity</span>
+          <select id="quantity-filter">
+            <option value="all">All</option>
+            <option value="config">Config</option>
+            <option value="voltage">Voltage</option>
+            <option value="resistance">Resistance</option>
+            <option value="current">Current</option>
+            <option value="power">Power</option>
+            <option value="temperature">Temperature</option>
+            <option value="percent">Percent</option>
+            <option value="seconds">Seconds</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label>
+          <span>Type</span>
+          <select id="raw-type-filter">
+            <option value="all">All</option>
+            <option value="config">Config</option>
+            <option value="uint16">uint16</option>
+            <option value="int16">int16</option>
+          </select>
+        </label>
+      </div>
+      <div class="channels-grid" id="channels-grid">
+        {% for channel in channels %}
+        <article
+          class="channel-card"
+          data-channel="{{ channel.index }}"
+          data-config-name="{{ channel.name }}"
+          data-config-tag="{{ channel.tag }}"
+          data-config-parameter="{{ channel.parameter }}"
+          data-config-scale="{{ channel.scale }}"
+          data-config-unit="{{ channel.unit }}"
+          data-config-signed="{{ 'true' if channel.signed else 'false' }}"
+        >
+          <header class="channel-card-header">
+            <div>
+              <span class="channel-index">Ch {{ channel.index }}</span>
+              <strong class="channel-parameter">{{ channel.tag }}</strong>
+            </div>
+            <span class="channel-state" data-i18n="inactive">Inactive</span>
+          </header>
+
+          <div class="reading-grid">
+            <div>
+              <span data-i18n="raw">Raw</span>
+              <strong class="raw">-</strong>
+            </div>
+            <div>
+              <span data-i18n="value">Value</span>
+              <strong class="value">-</strong>
+            </div>
+            <div>
+              <span data-i18n="unit">Unit</span>
+              <strong class="unit">{{ channel.unit }}</strong>
+            </div>
+            <div>
+              <span data-i18n="offset">Offset</span>
+              <strong class="offset">{{ 12 + (channel.index - 1) * 2 }}</strong>
+            </div>
+            <div>
+              <span>Quality</span>
+              <strong class="quality">-</strong>
+            </div>
+            <div>
+              <span>Alarm</span>
+              <strong class="alarm-state">-</strong>
+            </div>
+          </div>
+
+          <div class="control-grid">
+            <label>
+              <span data-i18n="quantity">Quantity</span>
               <select class="quantity-select" aria-label="Quantity for channel {{ channel.index }}">
-                <option value="config">Config: {{ channel.name }}</option>
+                <option value="config">Config</option>
                 <option value="voltage">Voltage</option>
                 <option value="resistance">Resistance</option>
                 <option value="current">Current</option>
@@ -71,32 +175,126 @@
                 <option value="seconds">Seconds</option>
                 <option value="custom">Custom</option>
               </select>
-            </td>
-            <td>{{ channel.parameter }}</td>
-            <td class="data-type">{{ "int16" if channel.signed else "uint16" }}</td>
-            <td class="raw">-</td>
-            <td class="value">-</td>
-            <td class="unit">{{ channel.unit }}</td>
-            <td>
-              <div class="custom-grid">
-                <input class="custom-name" type="text" placeholder="Name">
-                <input class="custom-scale" type="number" step="0.0001" placeholder="Scale">
-                <input class="custom-unit" type="text" placeholder="Unit">
-                <input class="custom-decimals" type="number" min="0" max="6" step="1" placeholder="Dec">
-              </div>
-            </td>
-            <td>{{ 12 + (channel.index - 1) * 2 }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+            </label>
+            <label>
+              <span data-i18n="type">Type</span>
+              <select class="signed-select" aria-label="Raw type for channel {{ channel.index }}">
+                <option value="config">Config: {{ "int16" if channel.signed else "uint16" }}</option>
+                <option value="uint16">uint16</option>
+                <option value="int16">int16</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="custom-grid">
+            <label>
+              <span data-i18n="custom_name">Name</span>
+              <input class="custom-name" type="text" data-i18n-placeholder="custom_name">
+            </label>
+            <label>
+              <span data-i18n="scale">Scale</span>
+              <input class="custom-scale" type="number" step="0.0001" data-i18n-placeholder="scale">
+            </label>
+            <label>
+              <span data-i18n="custom_unit">Unit</span>
+              <input class="custom-unit" type="text" data-i18n-placeholder="custom_unit">
+            </label>
+            <label>
+              <span data-i18n="decimals">Decimals</span>
+              <input class="custom-decimals" type="number" min="0" max="6" step="1" data-i18n-placeholder="decimals">
+            </label>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
     </section>
 
-    <p class="hint-line">Raw type is decoded on the server as uint16 or int16 from config.yaml. Quantity formatting is selected per channel in the browser.</p>
     <p class="error-line" id="last-error"></p>
   </main>
 
   <script>
+    window.name = "hiba_dashboard";
+
+    const TRANSLATIONS = {
+      en: {
+        active: "Active",
+        active_devices: "Active devices",
+        api_error: "API error",
+        channel_short: "Ch",
+        channels: "Channels",
+        charts: "Charts",
+        config: "Config",
+        custom: "Custom",
+        custom_name: "Name",
+        custom_unit: "Unit",
+        decode_errors: "Decode errors",
+        decimals: "Decimals",
+        device: "Device",
+        devices: "Devices",
+        inactive: "Inactive",
+        offset: "Offset",
+        packet_count: "Packet count",
+        parameter: "Parameter",
+        quantity: "Quantity",
+        quantity_current: "Current",
+        quantity_power: "Power",
+        quantity_resistance: "Resistance",
+        quantity_seconds: "Seconds",
+        quantity_temperature: "Temperature",
+        quantity_percent: "Percent",
+        quantity_voltage: "Voltage",
+        raw: "Raw",
+        receiving: "Receiving",
+        scale: "Scale",
+        selected_device_data: "Selected device data",
+        selected_device_hint: "Selected device data",
+        source_ip: "Source IP",
+        timestamp: "Timestamp",
+        type: "Type",
+        unit: "Unit",
+        value: "Value",
+        waiting: "Waiting",
+      },
+      ru: {
+        active: "Активен",
+        active_devices: "Активные устройства",
+        api_error: "Ошибка API",
+        channel_short: "Кан",
+        channels: "Каналы",
+        charts: "Графики",
+        config: "Конфиг",
+        custom: "Свой",
+        custom_name: "Название",
+        custom_unit: "Ед.",
+        decode_errors: "Ошибки декодера",
+        decimals: "Знаки",
+        device: "Устройство",
+        devices: "Устройства",
+        inactive: "Нет данных",
+        offset: "Offset",
+        packet_count: "Пакетов",
+        parameter: "Параметр",
+        quantity: "Величина",
+        quantity_current: "Ток",
+        quantity_power: "Мощность",
+        quantity_resistance: "Сопротивление",
+        quantity_seconds: "Секунды",
+        quantity_temperature: "Температура",
+        quantity_percent: "Проценты",
+        quantity_voltage: "Напряжение",
+        raw: "Raw",
+        receiving: "Прием",
+        scale: "Масштаб",
+        selected_device_data: "Данные выбранного устройства",
+        selected_device_hint: "Данные выбранного устройства",
+        source_ip: "IP источника",
+        timestamp: "Время",
+        type: "Тип",
+        unit: "Ед.",
+        value: "Значение",
+        waiting: "Ожидание",
+      },
+    };
     const PRESETS = {
       voltage: { name: "Voltage", scale: 0.1, unit: "V", decimals: 1 },
       resistance: { name: "Resistance", scale: 1, unit: "Ohm", decimals: 0 },
@@ -106,14 +304,77 @@
       percent: { name: "Percent", scale: 0.1, unit: "%", decimals: 1 },
       seconds: { name: "Seconds", scale: 0.001, unit: "s", decimals: 3 },
     };
-    const STORAGE_KEY = "hiba_channel_formatting_v1";
+    const STORAGE_KEY = "hiba_channel_formatting_v4";
+    const SELECTED_DEVICE_KEY = "hiba_selected_device";
+    const LANGUAGE_KEY = "hiba_language";
+    const PAYLOAD_START_OFFSET = 12;
+    const DEVICE_SLOT_WIDTH = 16;
 
-    const rows = new Map(
-      Array.from(document.querySelectorAll("[data-channel]")).map((row) => [
-        Number(row.dataset.channel),
-        row,
+    let currentLanguage = localStorage.getItem(LANGUAGE_KEY) || "ru";
+    let selectedDevice = Number(localStorage.getItem(SELECTED_DEVICE_KEY) || 1);
+    if (!Number.isInteger(selectedDevice) || selectedDevice < 1 || selectedDevice > 16) {
+      selectedDevice = 1;
+    }
+
+    const cards = new Map(
+      Array.from(document.querySelectorAll("[data-channel]")).map((card) => [
+        Number(card.dataset.channel),
+        card,
       ])
     );
+    const deviceButtons = new Map(
+      Array.from(document.querySelectorAll("[data-device]")).map((button) => [
+        Number(button.dataset.device),
+        button,
+      ])
+    );
+
+    function t(key) {
+      return TRANSLATIONS[currentLanguage]?.[key] || TRANSLATIONS.en[key] || key;
+    }
+
+    function deviceLabel(index) {
+      return `${t("device")} ${index}`;
+    }
+
+    function channelLabel(index) {
+      return `${t("channel_short")} ${index}`;
+    }
+
+    function applyLanguage() {
+      document.documentElement.lang = currentLanguage;
+      document.querySelectorAll("[data-i18n]").forEach((element) => {
+        element.textContent = t(element.dataset.i18n);
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
+        element.placeholder = t(element.dataset.i18nPlaceholder);
+      });
+      document.querySelectorAll("[data-lang]").forEach((button) => {
+        button.classList.toggle("is-selected", button.dataset.lang === currentLanguage);
+      });
+      for (const [index, button] of deviceButtons) {
+        if (!button.querySelector(".device-name").textContent.trim()) {
+          button.querySelector(".device-name").textContent = deviceLabel(index);
+        }
+        const isActive = button.classList.contains("is-active");
+        button.querySelector(".device-state").textContent = isActive ? t("active") : t("inactive");
+      }
+      for (const [index, card] of cards) {
+        card.querySelector(".channel-index").textContent = channelLabel(index);
+        const configOption = card.querySelector(".quantity-select option[value='config']");
+        configOption.textContent = t("config");
+        for (const option of card.querySelectorAll(".quantity-select option")) {
+          if (option.value !== "config") {
+            option.textContent = option.value === "custom" ? t("custom") : t(`quantity_${option.value}`);
+          }
+        }
+        const typeOption = card.querySelector(".signed-select option[value='config']");
+        typeOption.textContent = `${t("config")}: ${card.dataset.configSigned === "true" ? "int16" : "uint16"}`;
+        const isActive = card.classList.contains("is-channel-active");
+        card.querySelector(".channel-state").textContent = isActive ? t("active") : t("inactive");
+      }
+      selectDevice(selectedDevice);
+    }
 
     function loadSettings() {
       try {
@@ -125,13 +386,14 @@
 
     function saveSettings() {
       const settings = {};
-      for (const [index, row] of rows) {
+      for (const [index, card] of cards) {
         settings[index] = {
-          preset: row.querySelector(".quantity-select").value,
-          name: row.querySelector(".custom-name").value,
-          scale: row.querySelector(".custom-scale").value,
-          unit: row.querySelector(".custom-unit").value,
-          decimals: row.querySelector(".custom-decimals").value,
+          preset: card.querySelector(".quantity-select").value,
+          signed: card.querySelector(".signed-select").value,
+          name: card.querySelector(".custom-name").value,
+          scale: card.querySelector(".custom-scale").value,
+          unit: card.querySelector(".custom-unit").value,
+          decimals: card.querySelector(".custom-decimals").value,
         };
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
@@ -139,27 +401,28 @@
 
     function applyStoredSettings() {
       const settings = loadSettings();
-      for (const [index, row] of rows) {
-        const rowSettings = settings[index];
-        if (!rowSettings) {
+      for (const [index, card] of cards) {
+        const cardSettings = settings[index];
+        if (!cardSettings) {
           continue;
         }
-        row.querySelector(".quantity-select").value = rowSettings.preset || "config";
-        row.querySelector(".custom-name").value = rowSettings.name || "";
-        row.querySelector(".custom-scale").value = rowSettings.scale || "";
-        row.querySelector(".custom-unit").value = rowSettings.unit || "";
-        row.querySelector(".custom-decimals").value = rowSettings.decimals || "";
-        updateCustomState(row);
+        card.querySelector(".quantity-select").value = cardSettings.preset || "config";
+        card.querySelector(".signed-select").value = cardSettings.signed || "config";
+        card.querySelector(".custom-name").value = cardSettings.name || "";
+        card.querySelector(".custom-scale").value = cardSettings.scale || "";
+        card.querySelector(".custom-unit").value = cardSettings.unit || "";
+        card.querySelector(".custom-decimals").value = cardSettings.decimals || "";
+        updateCustomState(card);
       }
     }
 
-    function getFormat(row) {
-      const preset = row.querySelector(".quantity-select").value;
+    function getFormat(card) {
+      const preset = card.querySelector(".quantity-select").value;
       if (preset === "config") {
         return {
-          name: row.dataset.configName,
-          scale: Number(row.dataset.configScale),
-          unit: row.dataset.configUnit,
+          name: card.dataset.configName,
+          scale: Number(card.dataset.configScale),
+          unit: card.dataset.configUnit,
           decimals: 2,
         };
       }
@@ -167,21 +430,41 @@
         return PRESETS[preset];
       }
 
-      const scale = Number(row.querySelector(".custom-scale").value);
-      const decimals = Number(row.querySelector(".custom-decimals").value);
+      const scale = Number(card.querySelector(".custom-scale").value);
+      const decimals = Number(card.querySelector(".custom-decimals").value);
       return {
-        name: row.querySelector(".custom-name").value || "Custom",
+        name: card.querySelector(".custom-name").value || "Custom",
         scale: Number.isFinite(scale) ? scale : 1,
-        unit: row.querySelector(".custom-unit").value || "",
+        unit: card.querySelector(".custom-unit").value || "",
         decimals: Number.isInteger(decimals) ? Math.max(0, Math.min(decimals, 6)) : 2,
       };
     }
 
-    function updateCustomState(row) {
-      const isCustom = row.querySelector(".quantity-select").value === "custom";
-      row.querySelectorAll(".custom-grid input").forEach((input) => {
+    function updateCustomState(card) {
+      const isCustom = card.querySelector(".quantity-select").value === "custom";
+      card.classList.toggle("is-custom", isCustom);
+      card.querySelectorAll(".custom-grid input").forEach((input) => {
         input.disabled = !isCustom;
       });
+    }
+
+    function selectedDataType(card, channel) {
+      const selected = card.querySelector(".signed-select").value;
+      if (selected !== "config") {
+        return selected;
+      }
+      return channel.data_type || (card.dataset.configSigned === "true" ? "int16" : "uint16");
+    }
+
+    function interpretRaw(channel, dataType) {
+      const unsignedRaw = Number(channel.raw_unsigned);
+      if (!Number.isFinite(unsignedRaw)) {
+        return null;
+      }
+      if (dataType === "int16" && unsignedRaw >= 32768) {
+        return unsignedRaw - 65536;
+      }
+      return unsignedRaw;
     }
 
     function formatTimestamp(timestamp) {
@@ -198,17 +481,100 @@
       return (Number(raw) * format.scale).toFixed(format.decimals);
     }
 
-    for (const row of rows.values()) {
-      row.querySelector(".quantity-select").addEventListener("change", () => {
-        updateCustomState(row);
+    function selectDevice(index) {
+      selectedDevice = index;
+      localStorage.setItem(SELECTED_DEVICE_KEY, String(index));
+      document.getElementById("selected-device-label").textContent = deviceLabel(index);
+      for (const [deviceIndex, button] of deviceButtons) {
+        button.classList.toggle("is-selected", deviceIndex === index);
+      }
+      for (const [channelIndex, card] of cards) {
+        const offset = PAYLOAD_START_OFFSET + (index - 1) * DEVICE_SLOT_WIDTH + (channelIndex - 1) * 2;
+        card.querySelector(".offset").textContent = offset;
+      }
+    }
+
+    function updateDeviceGrid(latest, status) {
+      const live = Boolean(status.has_live_data);
+      const devicesByIndex = new Map((latest.devices || []).map((device) => [device.index, device]));
+      for (const [index, button] of deviceButtons) {
+        const device = devicesByIndex.get(index);
+        const isActive = live && Boolean(device && device.active);
+        button.classList.toggle("is-active", isActive);
+        button.classList.toggle("is-inactive", !isActive);
+        button.querySelector(".device-state").textContent = isActive ? t("active") : t("inactive");
+      }
+    }
+
+    function updateChannelCards(latest, status) {
+      const live = Boolean(status.has_live_data);
+      const device = (latest.devices || []).find((item) => item.index === selectedDevice);
+      const channelsByIndex = new Map((device?.channels || []).map((channel) => [channel.index, channel]));
+      const deviceActive = live && Boolean(device && device.active);
+
+      for (const [channelIndex, card] of cards) {
+        const channel = channelsByIndex.get(channelIndex);
+        const channelActive = deviceActive && Boolean(channel && channel.active);
+        card.classList.toggle("is-channel-active", channelActive);
+        card.classList.toggle("is-channel-inactive", !channelActive);
+        card.querySelector(".channel-state").textContent = channelActive ? t("active") : t("inactive");
+
+        if (!channelActive || !channel) {
+          card.querySelector(".raw").textContent = "-";
+          card.querySelector(".value").textContent = "-";
+          card.querySelector(".unit").textContent = "-";
+          card.querySelector(".quality").textContent = channel?.quality || "-";
+          card.querySelector(".alarm-state").textContent = channel?.alarm_state || "-";
+          card.classList.remove("is-warning-alarm", "is-critical-alarm");
+          continue;
+        }
+
+        const format = getFormat(card);
+        const dataType = selectedDataType(card, channel);
+        const interpretedRaw = interpretRaw(channel, dataType);
+        card.querySelector(".raw").textContent = interpretedRaw ?? "-";
+        card.querySelector(".value").textContent = formatValue(interpretedRaw, format);
+        card.querySelector(".unit").textContent = format.unit || "-";
+        card.querySelector(".quality").textContent = channel.quality || "-";
+        card.querySelector(".alarm-state").textContent = channel.alarm_state || "-";
+        card.classList.toggle("is-warning-alarm", String(channel.alarm_state || "").startsWith("warning"));
+        card.classList.toggle("is-critical-alarm", String(channel.alarm_state || "").startsWith("alarm"));
+      }
+    }
+
+    for (const card of cards.values()) {
+      card.querySelector(".quantity-select").addEventListener("change", () => {
+        updateCustomState(card);
         saveSettings();
+        applyFilters();
       });
-      row.querySelectorAll(".custom-grid input").forEach((input) => {
+      card.querySelector(".signed-select").addEventListener("change", () => {
+        saveSettings();
+        applyFilters();
+      });
+      card.querySelectorAll(".custom-grid input").forEach((input) => {
         input.addEventListener("input", saveSettings);
       });
-      updateCustomState(row);
+      updateCustomState(card);
     }
+    for (const [index, button] of deviceButtons) {
+      button.addEventListener("click", () => selectDevice(index));
+    }
+    document.querySelectorAll("[data-lang]").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentLanguage = button.dataset.lang;
+        localStorage.setItem(LANGUAGE_KEY, currentLanguage);
+        applyLanguage();
+      });
+    });
+    document.getElementById("device-status-filter").addEventListener("change", applyFilters);
+    document.getElementById("channel-status-filter").addEventListener("change", applyFilters);
+    document.getElementById("quantity-filter").addEventListener("change", applyFilters);
+    document.getElementById("raw-type-filter").addEventListener("change", applyFilters);
+
     applyStoredSettings();
+    applyLanguage();
+    selectDevice(selectedDevice);
 
     async function refresh() {
       try {
@@ -220,30 +586,47 @@
         const status = await statusResponse.json();
 
         document.getElementById("packet-count").textContent = status.packet_count ?? 0;
+        document.getElementById("active-devices").textContent = `${status.active_device_count ?? 0} / ${status.max_devices ?? 16}`;
         document.getElementById("source-ip").textContent = latest.source_ip || status.last_source_ip || "-";
         document.getElementById("timestamp").textContent = formatTimestamp(latest.timestamp);
         document.getElementById("decode-errors").textContent = status.decode_errors ?? 0;
         document.getElementById("last-error").textContent = status.last_error || "";
 
         const state = document.getElementById("connection-state");
-        state.textContent = status.has_data ? "Receiving" : "Waiting";
-        state.className = status.has_data ? "status-pill is-live" : "status-pill";
+        state.textContent = status.has_live_data ? t("receiving") : t("waiting");
+        state.className = status.has_live_data ? "status-pill is-live" : "status-pill";
 
-        for (const channel of latest.channels || []) {
-          const row = rows.get(channel.index);
-          if (!row) {
-            continue;
-          }
-          const format = getFormat(row);
-          row.querySelector(".data-type").textContent = channel.data_type || "-";
-          row.querySelector(".raw").textContent = channel.raw;
-          row.querySelector(".value").textContent = formatValue(channel.raw, format);
-          row.querySelector(".unit").textContent = format.unit || "-";
-        }
+        updateDeviceGrid(latest, status);
+        updateChannelCards(latest, status);
+        applyFilters();
       } catch (error) {
-        document.getElementById("connection-state").textContent = "API error";
+        document.getElementById("connection-state").textContent = t("api_error");
         document.getElementById("connection-state").className = "status-pill is-error";
         document.getElementById("last-error").textContent = error.message;
+      }
+    }
+
+    function applyFilters() {
+      const deviceFilter = document.getElementById("device-status-filter").value;
+      for (const button of deviceButtons.values()) {
+        const isActive = button.classList.contains("is-active");
+        const hideDevice = (deviceFilter === "active" && !isActive)
+          || (deviceFilter === "inactive" && isActive);
+        button.classList.toggle("is-hidden", hideDevice);
+      }
+
+      const channelFilter = document.getElementById("channel-status-filter").value;
+      const quantityFilter = document.getElementById("quantity-filter").value;
+      const typeFilter = document.getElementById("raw-type-filter").value;
+      for (const card of cards.values()) {
+        const isActive = card.classList.contains("is-channel-active");
+        const quantity = card.querySelector(".quantity-select").value;
+        const rawType = card.querySelector(".signed-select").value;
+        const hideChannel = (channelFilter === "active" && !isActive)
+          || (channelFilter === "inactive" && isActive)
+          || (quantityFilter !== "all" && quantityFilter !== quantity)
+          || (typeFilter !== "all" && typeFilter !== rawType);
+        card.classList.toggle("is-hidden", hideChannel);
       }
     }
 

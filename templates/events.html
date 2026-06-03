@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HIBA Events</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>Event / Alarm Log</h1>
+        <p>Threshold state changes</p>
+      </div>
+      <div class="topbar-actions">
+        <a class="action-button" href="{{ url_for('index') }}">Dashboard</a>
+        <a class="action-button" href="{{ url_for('config_page') }}">Config</a>
+        <a class="action-button" href="{{ url_for('diagnostics_page') }}">Diagnostics</a>
+      </div>
+    </header>
+
+    <section class="config-panel">
+      <div class="section-heading">
+        <h2>Events</h2>
+        <span id="event-count">0</span>
+      </div>
+      <div class="event-list" id="event-list"></div>
+    </section>
+  </main>
+
+  <script>
+    function eventClass(event) {
+      if (event.severity === "alarm") {
+        return "event-row is-alarm";
+      }
+      if (event.severity === "warning") {
+        return "event-row is-warning";
+      }
+      return "event-row";
+    }
+
+    function renderEvents(events) {
+      const list = document.getElementById("event-list");
+      list.innerHTML = "";
+      document.getElementById("event-count").textContent = `${events.length} events`;
+      if (!events.length) {
+        list.innerHTML = "<p class=\"hint-line\">No events yet</p>";
+        return;
+      }
+      for (const event of events.slice().reverse()) {
+        const row = document.createElement("article");
+        row.className = eventClass(event);
+        row.innerHTML = `
+          <strong>${event.severity.toUpperCase()} ${event.state}</strong>
+          <span>${new Date(event.timestamp).toLocaleString()}</span>
+          <span>${event.device_name} / ${event.tag || event.parameter || "channel " + event.channel_index}</span>
+          <span>${event.value ?? "-"} ${event.unit || ""}</span>
+          <p>${event.message}</p>
+        `;
+        list.appendChild(row);
+      }
+    }
+
+    async function refreshEvents() {
+      const response = await fetch("/api/events");
+      const payload = await response.json();
+      renderEvents(payload.items || []);
+    }
+
+    refreshEvents();
+    window.setInterval(refreshEvents, 1000);
+  </script>
+</body>
+</html>

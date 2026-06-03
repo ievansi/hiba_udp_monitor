@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HIBA Charts</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="app-shell chart-shell">
+    <header class="topbar">
+      <div>
+        <h1 data-i18n="charts_title">HIBA Charts</h1>
+        <p data-i18n="charts_subtitle">History trends</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="language-switch" aria-label="Language">
+          <button type="button" data-lang="ru">RU</button>
+          <button type="button" data-lang="en">EN</button>
+        </div>
+        <a class="action-button" id="dashboard-link" href="{{ url_for('index') }}" target="hiba_dashboard" data-i18n="dashboard">Dashboard</a>
+        <div class="status-pill" id="chart-state" data-i18n="waiting">Waiting</div>
+      </div>
+    </header>
+
+    <section class="chart-controls">
+      <label>
+        <span data-i18n="device">Device</span>
+        <select id="device-select">
+          {% for index in range(1, max_devices + 1) %}
+          <option value="{{ index }}">Device {{ index }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span data-i18n="points">Points</span>
+        <select id="limit-select">
+          <option value="500">500</option>
+          <option value="1000" selected>1000</option>
+          <option value="2000">2000</option>
+          <option value="5000">5000</option>
+        </select>
+      </label>
+      <div class="channel-checks" aria-label="Channels">
+        {% for channel in channels %}
+        <label>
+          <input type="checkbox" value="{{ channel.index }}" {% if channel.index in [1, 8] %}checked{% endif %}>
+          <span class="channel-check-label" data-channel-label="{{ channel.index }}">Ch {{ channel.index }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="annotation-panel">
+      <div class="section-heading">
+        <h2>Annotations</h2>
+        <span>Events on chart</span>
+      </div>
+      <form class="annotation-form" id="annotation-form">
+        <label>
+          <span>Kind</span>
+          <select id="annotation-kind">
+            <option value="start">Motor start</option>
+            <option value="parameter">Parameter change</option>
+            <option value="fault">Fault</option>
+            <option value="stop">Stop</option>
+            <option value="event">Event</option>
+          </select>
+        </label>
+        <label>
+          <span>Label</span>
+          <input id="annotation-label" type="text" placeholder="Event label">
+        </label>
+        <label>
+          <span>Details</span>
+          <input id="annotation-details" type="text" placeholder="Optional note">
+        </label>
+        <label>
+          <span>Device</span>
+          <select id="annotation-device">
+            <option value="">Any</option>
+            {% for index in range(1, max_devices + 1) %}
+            <option value="{{ index }}">Device {{ index }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Channel</span>
+          <select id="annotation-channel">
+            <option value="">Any</option>
+            {% for channel in channels %}
+            <option value="{{ channel.index }}">Ch {{ channel.index }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="action-button primary-action" type="submit">Add</button>
+      </form>
+      <div class="annotation-list" id="annotation-list"></div>
+    </section>
+
+    <section class="chart-panel">
+      <canvas id="history-chart"></canvas>
+    </section>
+
+    <p class="error-line" id="chart-error"></p>
+  </main>
+
+  <script>
+    window.name = "hiba_charts";
+
+    const TRANSLATIONS = {
+      en: {
+        api_error: "API error",
+        channel_short: "Ch",
+        charts_title: "HIBA Charts",
+        charts_subtitle: "History trends",
+        dashboard: "Dashboard",
+        device: "Device",
+        live: "Live",
+        no_history_data: "No history data",
+        points: "Points",
+        waiting: "Waiting",
+      },
+      ru: {
+        api_error: "Ошибка API",
+        channel_short: "Кан",
+        charts_title: "Графики HIBA",
+        charts_subtitle: "История значений",
+        dashboard: "Главная",
+        device: "Устройство",
+        live: "Активно",
+        no_history_data: "Нет данных истории",
+        points: "Точек",
+        waiting: "Ожидание",
+      },
+    };
+    const LANGUAGE_KEY = "hiba_language";
+    let currentLanguage = localStorage.getItem(LANGUAGE_KEY) || "ru";
+    const CHANNELS = {
+      {% for channel in channels %}
+      {{ channel.index }}: {
+        name: {{ channel.name|tojson }},
+        parameter: {{ channel.parameter|tojson }},
+        unit: {{ channel.unit|tojson }},
+      },
+      {% endfor %}
+    };
+    const COLORS = ["#0b7f75", "#b42318", "#8a5a00", "#4f46e5", "#0072b2", "#c026d3", "#2f6b2f", "#6f4e37"];
+    const ANNOTATION_COLORS = {
+      start: "#0b7f75",
+      parameter: "#4f46e5",
+      fault: "#b42318",
+      stop: "#8a5a00",
+      event: "#657485",
+    };
+    const canvas = document.getElementById("history-chart");
+    const ctx = canvas.getContext("2d");
+    let annotations = [];
+    let chartRequestInFlight = false;
+    let pendingChartRefresh = false;
+    let lastAnnotationLoad = 0;
+    let lastCanvasWidth = 0;
+    let lastCanvasHeight = 0;
+    let lastCanvasRatio = 0;
+    const CHART_REFRESH_MS = 1500;
+    const ANNOTATION_REFRESH_MS = 5000;
+
+    function t(key) {
+      return TRANSLATIONS[currentLanguage]?.[key] || TRANSLATIONS.en[key] || key;
+    }
+
+    function deviceLabel(index) {
+      return `${t("device")} ${index}`;
+    }
+
+    function channelLabel(index) {
+      return `${t("channel_short")} ${index}`;
+    }
+
+    function applyLanguage() {
+      document.documentElement.lang = currentLanguage;
+      document.querySelectorAll("[data-i18n]").forEach((element) => {
+        element.textContent = t(element.dataset.i18n);
+      });
+      document.querySelectorAll("[data-lang]").forEach((button) => {
+        button.classList.toggle("is-selected", button.dataset.lang === currentLanguage);
+      });
+      document.querySelectorAll("#device-select option").forEach((option) => {
+        option.textContent = deviceLabel(option.value);
+      });
+      document.querySelectorAll("[data-channel-label]").forEach((label) => {
+        label.textContent = channelLabel(label.dataset.channelLabel);
+      });
+    }
+
+    function selectedChannels() {
+      const indexes = Array.from(document.querySelectorAll(".channel-checks input:checked"))
+        .map((input) => Number(input.value))
+        .filter((value) => Number.isInteger(value));
+      return indexes.length ? indexes : [1];
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      const nextWidth = Math.max(1, Math.floor(rect.width * ratio));
+      const nextHeight = Math.max(1, Math.floor(rect.height * ratio));
+      if (nextWidth !== lastCanvasWidth || nextHeight !== lastCanvasHeight || ratio !== lastCanvasRatio) {
+        canvas.width = nextWidth;
+        canvas.height = nextHeight;
+        lastCanvasWidth = nextWidth;
+        lastCanvasHeight = nextHeight;
+        lastCanvasRatio = ratio;
+      }
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      return rect;
+    }
+
+    function drawText(text, x, y, color = "#657485", size = 13) {
+      ctx.fillStyle = color;
+      ctx.font = `${size}px Segoe UI, Arial, sans-serif`;
+      ctx.fillText(text, x, y);
+    }
+
+    function drawChart(history) {
+      const rect = resizeCanvas();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      const pad = { left: 62, right: 24, top: 26, bottom: 42 };
+      const width = rect.width - pad.left - pad.right;
+      const height = rect.height - pad.top - pad.bottom;
+      const items = history.items || [];
+      const channelIndexes = selectedChannels();
+
+      const series = channelIndexes.map((channelIndex, colorIndex) => {
+        const points = items.map((item, pointIndex) => {
+          const channel = (item.channels || []).find((candidate) => candidate.index === channelIndex);
+          return {
+            x: pointIndex,
+            y: channel ? Number(channel.value) : NaN,
+          };
+        }).filter((point) => Number.isFinite(point.y));
+        return {
+          channelIndex,
+          color: COLORS[colorIndex % COLORS.length],
+          points,
+        };
+      });
+
+      const allValues = series.flatMap((line) => line.points.map((point) => point.y));
+      if (!items.length || !allValues.length) {
+        drawText(t("no_history_data"), pad.left, pad.top + 24);
+        return;
+      }
+
+      let minY = Math.min(...allValues);
+      let maxY = Math.max(...allValues);
+      if (minY === maxY) {
+        minY -= 1;
+        maxY += 1;
+      }
+      const paddingY = (maxY - minY) * 0.08;
+      minY -= paddingY;
+      maxY += paddingY;
+
+      ctx.strokeStyle = "#dce4ea";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pad.left, pad.top);
+      ctx.lineTo(pad.left, pad.top + height);
+      ctx.lineTo(pad.left + width, pad.top + height);
+      ctx.stroke();
+
+      for (let tick = 0; tick <= 4; tick += 1) {
+        const y = pad.top + (height * tick) / 4;
+        const value = maxY - ((maxY - minY) * tick) / 4;
+        ctx.strokeStyle = "#eef3f6";
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(pad.left + width, y);
+        ctx.stroke();
+        drawText(value.toFixed(2), 8, y + 4, "#657485", 12);
+      }
+
+      const maxX = Math.max(1, items.length - 1);
+      for (const line of series) {
+        if (!line.points.length) {
+          continue;
+        }
+        ctx.strokeStyle = line.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        line.points.forEach((point, index) => {
+          const x = pad.left + (point.x / maxX) * width;
+          const y = pad.top + height - ((point.y - minY) / (maxY - minY)) * height;
+          if (index === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+      }
+
+      drawAnnotations(items, pad, width, height);
+
+      let legendX = pad.left;
+      for (const line of series) {
+        const channel = CHANNELS[line.channelIndex];
+        ctx.fillStyle = line.color;
+        ctx.fillRect(legendX, rect.height - 24, 12, 12);
+        drawText(`${channelLabel(line.channelIndex)} ${channel.parameter}`, legendX + 18, rect.height - 14, "#1d2730", 12);
+        legendX += 128;
+      }
+    }
+
+    function drawAnnotations(items, pad, width, height) {
+      if (!items.length || !annotations.length) {
+        return;
+      }
+      const times = items.map((item) => new Date(item.timestamp).getTime());
+      const firstTime = times[0];
+      const lastTime = times[times.length - 1];
+      const span = Math.max(1, lastTime - firstTime);
+
+      for (const annotation of annotations) {
+        const time = new Date(annotation.timestamp).getTime();
+        if (!Number.isFinite(time) || time < firstTime || time > lastTime) {
+          continue;
+        }
+        const x = pad.left + ((time - firstTime) / span) * width;
+        ctx.strokeStyle = ANNOTATION_COLORS[annotation.kind] || ANNOTATION_COLORS.event;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x, pad.top);
+        ctx.lineTo(x, pad.top + height);
+        ctx.stroke();
+        drawText(annotation.label, x + 5, pad.top + 14, ctx.strokeStyle, 12);
+      }
+    }
+
+    function renderAnnotations() {
+      const list = document.getElementById("annotation-list");
+      list.innerHTML = "";
+      for (const annotation of annotations.slice(-6).reverse()) {
+        const item = document.createElement("div");
+        item.className = `annotation-item annotation-${annotation.kind}`;
+        item.textContent = `${new Date(annotation.timestamp).toLocaleTimeString()} ${annotation.label}`;
+        list.appendChild(item);
+      }
+    }
+
+    async function loadAnnotations(force = false) {
+      const now = Date.now();
+      if (!force && now - lastAnnotationLoad < ANNOTATION_REFRESH_MS) {
+        return;
+      }
+      const response = await fetch("/api/annotations");
+      const payload = await response.json();
+      annotations = payload.items || [];
+      lastAnnotationLoad = now;
+      renderAnnotations();
+    }
+
+    async function addAnnotation(event) {
+      event.preventDefault();
+      const label = document.getElementById("annotation-label").value.trim();
+      if (!label) {
+        return;
+      }
+      const response = await fetch("/api/annotations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: document.getElementById("annotation-kind").value,
+          label,
+          details: document.getElementById("annotation-details").value,
+          device: document.getElementById("annotation-device").value,
+          channel: document.getElementById("annotation-channel").value,
+        }),
+      });
+      if (response.ok) {
+        document.getElementById("annotation-label").value = "";
+        document.getElementById("annotation-details").value = "";
+        await loadAnnotations(true);
+        await refreshChart();
+      }
+    }
+
+    async function refreshChart() {
+      if (chartRequestInFlight) {
+        pendingChartRefresh = true;
+        return;
+      }
+
+      chartRequestInFlight = true;
+      pendingChartRefresh = false;
+      const device = document.getElementById("device-select").value;
+      const limit = document.getElementById("limit-select").value;
+      const channels = selectedChannels().join(",");
+      try {
+        await loadAnnotations();
+        const historyResponse = await fetch(`/api/history?device=${device}&channels=${channels}&limit=${limit}`);
+        const history = await historyResponse.json();
+        window.requestAnimationFrame(() => drawChart(history));
+        document.getElementById("chart-state").textContent = t("live");
+        document.getElementById("chart-state").className = "status-pill is-live";
+        document.getElementById("chart-error").textContent = "";
+      } catch (error) {
+        document.getElementById("chart-state").textContent = t("api_error");
+        document.getElementById("chart-state").className = "status-pill is-error";
+        document.getElementById("chart-error").textContent = error.message;
+      } finally {
+        chartRequestInFlight = false;
+        if (pendingChartRefresh) {
+          window.setTimeout(refreshChart, 0);
+        }
+      }
+    }
+
+    document.getElementById("device-select").addEventListener("change", refreshChart);
+    document.getElementById("limit-select").addEventListener("change", refreshChart);
+    document.getElementById("annotation-form").addEventListener("submit", addAnnotation);
+    document.querySelectorAll(".channel-checks input").forEach((input) => {
+      input.addEventListener("change", refreshChart);
+    });
+    document.querySelectorAll("[data-lang]").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentLanguage = button.dataset.lang;
+        localStorage.setItem(LANGUAGE_KEY, currentLanguage);
+        applyLanguage();
+        refreshChart();
+      });
+    });
+    document.getElementById("dashboard-link").addEventListener("click", (event) => {
+      if (!window.opener || window.opener.closed) {
+        return;
+      }
+
+      event.preventDefault();
+      window.opener.focus();
+
+      window.setTimeout(() => {
+        if (document.hasFocus()) {
+          window.location.href = event.currentTarget.href;
+        }
+      }, 150);
+    });
+    window.addEventListener("resize", () => {
+      window.requestAnimationFrame(refreshChart);
+    });
+
+    applyLanguage();
+    refreshChart();
+    window.setInterval(refreshChart, CHART_REFRESH_MS);
+  </script>
+</body>
+</html>

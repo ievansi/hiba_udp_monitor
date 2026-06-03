@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HIBA Channel Config</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>Monitor Config</h1>
+        <p>config.yaml</p>
+      </div>
+      <div class="topbar-actions">
+        <a class="action-button" href="{{ url_for('index') }}">Dashboard</a>
+        <a class="action-button" href="{{ url_for('events_page') }}">Events</a>
+        <a class="action-button" href="{{ url_for('diagnostics_page') }}">Diagnostics</a>
+        <button class="action-button primary-action save-action" id="save-config" type="button">Save</button>
+      </div>
+    </header>
+
+    <section class="config-panel">
+      <div class="section-heading">
+        <h2>Devices</h2>
+        <span>Device model</span>
+      </div>
+      <div class="config-grid" id="device-config-grid">
+        {% for device in devices %}
+        <article class="config-card" data-device="{{ device.index }}">
+          <header class="channel-card-header">
+            <div>
+              <span class="channel-index">Device {{ device.index }}</span>
+              <strong class="channel-parameter">{{ device.name }}</strong>
+            </div>
+          </header>
+          <div class="config-form-grid">
+            <label>
+              <span>Name</span>
+              <input class="device-name-input" type="text" value="{{ device.name }}">
+            </label>
+            <label>
+              <span>Model</span>
+              <input class="device-model-input" type="text" value="{{ device.model }}">
+            </label>
+            <label>
+              <span>Enabled</span>
+              <select class="device-enabled-input">
+                <option value="true" {% if device.enabled %}selected{% endif %}>Enabled</option>
+                <option value="false" {% if not device.enabled %}selected{% endif %}>Disabled</option>
+              </select>
+            </label>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="config-panel">
+      <div class="section-heading">
+        <h2>Tags / Channels</h2>
+        <span>Tag model and threshold alarms</span>
+      </div>
+
+      <div class="config-grid" id="config-grid">
+        {% for channel in channels %}
+        <article class="config-card" data-channel="{{ channel.index }}">
+          <header class="channel-card-header">
+            <div>
+              <span class="channel-index">Ch {{ channel.index }}</span>
+              <strong class="channel-parameter">{{ channel.parameter }}</strong>
+            </div>
+          </header>
+
+          <div class="config-form-grid">
+            <label>
+              <span>Name</span>
+              <input class="config-name" type="text" value="{{ channel.name }}">
+            </label>
+            <label>
+              <span>Tag</span>
+              <input class="config-tag" type="text" value="{{ channel.tag }}">
+            </label>
+            <label>
+              <span>Parameter</span>
+              <input class="config-parameter" type="text" value="{{ channel.parameter }}">
+            </label>
+            <label>
+              <span>Scale</span>
+              <input class="config-scale" type="number" step="0.0001" value="{{ channel.scale }}">
+            </label>
+            <label>
+              <span>Unit</span>
+              <input class="config-unit" type="text" value="{{ channel.unit }}">
+            </label>
+            <label>
+              <span>Signed</span>
+              <select class="config-signed">
+                <option value="false" {% if not channel.signed %}selected{% endif %}>uint16</option>
+                <option value="true" {% if channel.signed %}selected{% endif %}>int16</option>
+              </select>
+            </label>
+            <label>
+              <span>Warning low</span>
+              <input class="config-warning-low" type="number" step="0.0001" value="{{ channel.warning_low if channel.warning_low is not none else '' }}">
+            </label>
+            <label>
+              <span>Warning high</span>
+              <input class="config-warning-high" type="number" step="0.0001" value="{{ channel.warning_high if channel.warning_high is not none else '' }}">
+            </label>
+            <label>
+              <span>Alarm low</span>
+              <input class="config-alarm-low" type="number" step="0.0001" value="{{ channel.alarm_low if channel.alarm_low is not none else '' }}">
+            </label>
+            <label>
+              <span>Alarm high</span>
+              <input class="config-alarm-high" type="number" step="0.0001" value="{{ channel.alarm_high if channel.alarm_high is not none else '' }}">
+            </label>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <p class="hint-line">Thresholds are evaluated against scaled values. Empty threshold fields disable that limit.</p>
+    <p class="error-line" id="config-message"></p>
+  </main>
+
+  <script>
+    function numericOrNull(value) {
+      if (value === "") {
+        return null;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function collectConfig() {
+      return {
+        devices: Array.from(document.querySelectorAll("[data-device]")).map((card) => ({
+          name: card.querySelector(".device-name-input").value,
+          model: card.querySelector(".device-model-input").value,
+          enabled: card.querySelector(".device-enabled-input").value === "true",
+        })),
+        channels: Array.from(document.querySelectorAll("[data-channel]")).map((card) => ({
+          name: card.querySelector(".config-name").value,
+          tag: card.querySelector(".config-tag").value,
+          parameter: card.querySelector(".config-parameter").value,
+          scale: Number(card.querySelector(".config-scale").value),
+          unit: card.querySelector(".config-unit").value,
+          signed: card.querySelector(".config-signed").value === "true",
+          warning_low: numericOrNull(card.querySelector(".config-warning-low").value),
+          warning_high: numericOrNull(card.querySelector(".config-warning-high").value),
+          alarm_low: numericOrNull(card.querySelector(".config-alarm-low").value),
+          alarm_high: numericOrNull(card.querySelector(".config-alarm-high").value),
+        })),
+      };
+    }
+
+    async function saveConfig() {
+      const message = document.getElementById("config-message");
+      const saveButton = document.getElementById("save-config");
+      message.textContent = "";
+      saveButton.disabled = true;
+      saveButton.classList.remove("is-saved", "is-error");
+      saveButton.classList.add("is-saving");
+      saveButton.textContent = "Saving...";
+      try {
+        const response = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(collectConfig()),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Failed to save config");
+        }
+        for (const channel of payload.channels) {
+          const card = document.querySelector(`[data-channel="${channel.index}"]`);
+          card.querySelector(".channel-parameter").textContent = channel.parameter || "-";
+        }
+        for (const device of payload.devices) {
+          const card = document.querySelector(`[data-device="${device.index}"]`);
+          card.querySelector(".channel-parameter").textContent = device.name || "-";
+        }
+        message.textContent = "Saved";
+        saveButton.classList.remove("is-saving");
+        saveButton.classList.add("is-saved");
+        saveButton.textContent = "Saved";
+      } catch (error) {
+        message.textContent = error.message;
+        saveButton.classList.remove("is-saving");
+        saveButton.classList.add("is-error");
+        saveButton.textContent = "Error";
+      } finally {
+        window.setTimeout(() => {
+          saveButton.disabled = false;
+          saveButton.classList.remove("is-saving", "is-saved", "is-error");
+          saveButton.textContent = "Save";
+        }, 900);
+      }
+    }
+
+    document.getElementById("save-config").addEventListener("click", saveConfig);
+  </script>
+</body>
+</html>
